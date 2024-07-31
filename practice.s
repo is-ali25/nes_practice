@@ -57,7 +57,9 @@ SPRITEY		= SPRITES		; these are used to access the fields within a sprite, given
 SPRITETILE	= SPRITES+1
 SPRITEATTR	= SPRITES+2
 SPRITEX		= SPRITES+3
-NUMTILES = 23 ;total nuber of tiles we're rendering
+NUMTILES = 23 ;total nuber of sprite tiles we're rendering
+SCROLLX = 0
+SCROLLY = 0
 
 ; sprite indexes
 ; when used to locate the address for a sprite in the SPRITES data, it's multiplied by 4
@@ -219,17 +221,18 @@ NMI:		PHA			; save registers
 		PHA
 		TYA
 		PHA
-
+		
 		JSR DRAW
 
-	     	PLA			; restore registers
-	     	TAY
-	     	PLA
-	     	TAX
-	     	PLA
+	  PLA			; restore registers
+	  TAY
+	  PLA
+	  TAX
+	  PLA
 		RTI
 
 DRAW:		LDA #1			; read joypads
+
 		STA JOYPAD1
 		LDA #0
 		STA JOYPAD1
@@ -242,11 +245,19 @@ DRAW:		LDA #1			; read joypads
 	:	LDA #$02		; load sprite data into OAM
 		STA OAMDMA
 
-	 	BIT PPUSTATUS		; reset loading
-		LDA #0
+	 	;BIT PPUSTATUS		; reset loading
+		;LDA #0
+		;STA PPUSCROLL
+		;STA PPUSCROLL
+		;RTS
+
+						;scroll the nametable
+		BIT PPUSTATUS
+		INC SCROLLX
+		LDA SCROLLX
 		STA PPUSCROLL
+		LDA #0			;if I put SCROLLY instead of 0 here it will also scroll in the y-direction. Why is this? (ask Joe)
 		STA PPUSCROLL
-		RTS
 
 
 ; subroutine that moves the sprites
