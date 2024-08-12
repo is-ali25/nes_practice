@@ -49,8 +49,6 @@ APUFRAME	= $4017
 ; NES controller addresses - https://www.nesdev.org/wiki/Controller_reading_code
 JOYPAD1		= $4016
 JOYPAD2		= $4017
-BUTTONS = #$00
-
 
 ; the program's variables
 SPRITES		= $200			; copy of the sprites data, $200-$2FF - https://www.nesdev.org/wiki/PPU_OAM
@@ -86,6 +84,7 @@ MOVEX:  	.res 2			; array of sprite movement x directions (2)
 MOVEY:  	.res 2			; array of sprite movement y directions (2)
 DX:		.res 1
 DY:		.res 1
+PALETTETEMP: .res 1
 
 
 		.segment "STARTUP"
@@ -237,19 +236,14 @@ DRAW:		LDA #1			; read joypads
 		STA JOYPAD1
 		LDA #0
 		STA JOYPAD1
-		LDA JOYPAD1		; get first button (A button), if pressed move the sprites
-		LSR A
-    ; : LDA JOYPAD1
-    ; LSR A        ; bit 0 -> Carry
-    ; ROL BUTTONS  ; Carry -> bit 0; bit 7 -> Carry
-    ; BCC :-
-		; LDA BUTTONS
+		LDA JOYPAD1		; get first botton (A button), if pressed move the sprites
 		AND #%00000001
 		BEQ :+
 
 		JSR MOVE		; move sprites
 
-	:	LDA #$02		; load sprite data into OAM
+	:	
+		LDA #$02		; load sprite data into OAM
 		STA OAMDMA
 
 	 	;BIT PPUSTATUS		; reset loading
@@ -333,8 +327,43 @@ BOUNCE5:	LDA SPRITEX, X
 		INX
 		DEY			; count down
 		BNE BOUNCE5
+		;RTS
+PALETTECYCLE:
+		; LDA INITIALPALETTES+1 		;1 --> temp
+		; STA PALETTETEMP						
+		; LDA INITIALPALETTES+3 	;3 --> 1
+		; STA INITIALPALETTES+1
+		; LDA INITIALPALETTES+2 	;2 --> 3
+		; STA INITIALPALETTES+3
+		; LDA PALETTETEMP 			   ;temp --> 2
+		; STA INITIALPALETTES+2, X
 
-		RTS
+		LDA $44						;just trying to change a single color
+		STA INITIALPALETTES+1
+
+		LDA #>PALETTES						;update palette info
+		STA PPUADDR
+		LDA #<PALETTES
+		STA PPUADDR
+		LDX #0
+	:	LDA INITIALPALETTES, X
+		STA PPUDATA
+		INX
+		CPX #32
+		BNE :-
+
+		LDA #>PALETTES		; workaround for palette corruption bug - https://www.nesdev.org/wiki/PPU_registers#Palette_corruption
+		STA PPUADDR
+		LDA #<PALETTES
+		STA PPUADDR
+		STA PPUADDR
+		; STA PPUADDR
+
+		
+MODULUS:
+	SEC
+	SBC #32
+	RTS
 
 
 INITIALSPRITES:
@@ -375,7 +404,9 @@ INITIALSPRITES:
 INITIALPALETTES:
 	 	;background palettes - https://www.nesdev.org/wiki/PPU_palettes#Palettes
 		.byte $00
+		;.byte $31, $00, $0A, $15	; background palette 0
 		.byte $0A, $15, $31, $00	; background palette 0
+		;.byte $15, $31, $00, $0A	; background palette 0
 		.byte $00, $00, $00, $00	; background palette 1 (unused)
 		.byte $00, $00, $00, $00	; background palette 2 (unused)
 		.byte $00, $00, $00		; background palette 3 (unused)
