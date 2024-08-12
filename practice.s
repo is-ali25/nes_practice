@@ -49,6 +49,7 @@ APUFRAME	= $4017
 ; NES controller addresses - https://www.nesdev.org/wiki/Controller_reading_code
 JOYPAD1		= $4016
 JOYPAD2		= $4017
+BUTTONS = #$00
 
 
 ; the program's variables
@@ -236,7 +237,13 @@ DRAW:		LDA #1			; read joypads
 		STA JOYPAD1
 		LDA #0
 		STA JOYPAD1
-		LDA JOYPAD1		; get first botton (A button), if pressed move the sprites
+		LDA JOYPAD1		; get first button (A button), if pressed move the sprites
+		LSR A
+    ; : LDA JOYPAD1
+    ; LSR A        ; bit 0 -> Carry
+    ; ROL BUTTONS  ; Carry -> bit 0; bit 7 -> Carry
+    ; BCC :-
+		; LDA BUTTONS
 		AND #%00000001
 		BEQ :+
 
@@ -256,9 +263,10 @@ DRAW:		LDA #1			; read joypads
 		INC SCROLLX
 		LDA SCROLLX
 		STA PPUSCROLL
-		LDA #0			;if I put SCROLLY instead of 0 here it will also scroll in the y-direction. Why is this? (ask Joe)
+		LDA #0			;if I put SCROLLY instead of 0 here it will also scroll in the y-direction, even though SCROLLY is set to 0. Why is this? (ask Joe)
 		STA PPUSCROLL
 
+		RTS
 
 ; subroutine that moves the sprites
 MOVE:		LDA #MUSHROOM		; talking about the mushroom
