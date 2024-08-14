@@ -339,25 +339,28 @@ PALETTECYCLE:
 		; STA INITIALPALETTES+2, X
 
 		LDA $44						;just trying to change a single color
-		STA INITIALPALETTES+1
+		LDX #2
+		STA INITIALPALETTES, X
 
 		LDA #>PALETTES						;update palette info
 		STA PPUADDR
-		LDA #<PALETTES
+		LDX #<PALETTES
+		INX
+		TXA
 		STA PPUADDR
 		LDX #0
-	:	LDA INITIALPALETTES, X
+	:	LDA INITIALPALETTES+2, X
 		STA PPUDATA
-		INX
-		CPX #32
-		BNE :-
+		; INX
+		; CPX #32
+		; BNE :-
 
 		LDA #>PALETTES		; workaround for palette corruption bug - https://www.nesdev.org/wiki/PPU_registers#Palette_corruption
 		STA PPUADDR
 		LDA #<PALETTES
 		STA PPUADDR
 		STA PPUADDR
-		; STA PPUADDR
+		STA PPUADDR
 
 		
 MODULUS:
