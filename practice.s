@@ -57,8 +57,6 @@ SPRITETILE	= SPRITES+1
 SPRITEATTR	= SPRITES+2
 SPRITEX		= SPRITES+3
 NUMTILES = 23 ;total nuber of sprite tiles we're rendering
-SCROLLX = 0
-SCROLLY = 0
 
 ; sprite indexes
 ; when used to locate the address for a sprite in the SPRITES data, it's multiplied by 4
@@ -84,7 +82,10 @@ MOVEX:  	.res 2			; array of sprite movement x directions (2)
 MOVEY:  	.res 2			; array of sprite movement y directions (2)
 DX:		.res 1
 DY:		.res 1
-PALETTETEMP: .res 1
+PALETTECYCLETEMP: .res 0
+PALETTECYCLEOFFSET: .byte 0
+SCROLLX: .byte 0
+SCROLLY: .byte 0
 
 
 		.segment "STARTUP"
@@ -140,7 +141,7 @@ RESET:		SEI
 		LDA #<PALETTES
 		STA PPUADDR
 		LDX #0
-	:	LDA INITIALPALETTES, X
+	:	LDA RAMPALETTES, X
 		STA PPUDATA
 		INX
 		CPX #32
@@ -241,25 +242,24 @@ DRAW:		LDA #1			; read joypads
 		BEQ :+
 
 		JSR MOVE		; move sprites
+		JSR PALETTECYCLE
 
 	:	
 		LDA #$02		; load sprite data into OAM
 		STA OAMDMA
-
-	 	;BIT PPUSTATUS		; reset loading
-		;LDA #0
-		;STA PPUSCROLL
-		;STA PPUSCROLL
-		;RTS
 
 						;scroll the nametable
 		BIT PPUSTATUS
 		INC SCROLLX
 		LDA SCROLLX
 		STA PPUSCROLL
-		LDA #0			;if I put SCROLLY instead of 0 here it will also scroll in the y-direction, even though SCROLLY is set to 0. Why is this? (ask Joe)
+		LDA SCROLLY
 		STA PPUSCROLL
 
+		;BIT PPUSTATUS		; reset loading
+		;LDA #0
+		;STA PPUSCROLL
+		;STA PPUSCROLL
 		RTS
 
 ; subroutine that moves the sprites
@@ -327,47 +327,66 @@ BOUNCE5:	LDA SPRITEX, X
 		INX
 		DEY			; count down
 		BNE BOUNCE5
-		;RTS
+		RTS
 PALETTECYCLE:
-		; LDA INITIALPALETTES+1 		;1 --> temp
-		; STA PALETTETEMP						
-		; LDA INITIALPALETTES+3 	;3 --> 1
-		; STA INITIALPALETTES+1
-		; LDA INITIALPALETTES+2 	;2 --> 3
-		; STA INITIALPALETTES+3
-		; LDA PALETTETEMP 			   ;temp --> 2
-		; STA INITIALPALETTES+2, X
+		; LDA #$15
+		; STA RAMBKGNDPALETTES+1		
+		;^ here I wanted to store the magenta color where the green is in our data however
+		;it seems like we can't change the data in this file with code. 
+		;We can read from the data but we can't write to it (CONFIRM THIS WITH JOE)
+		;So to change palette info we have to manipulate the PPU adresses directly
 
-		LDA $44						;just trying to change a single color
-		LDX #2
-		STA INITIALPALETTES, X
-
-		LDA #>PALETTES						;update palette info
+		LDA #>BKGNDPALETTE
 		STA PPUADDR
-		LDX #<PALETTES
+		LDA #<BKGNDPALETTE+1
+		STA PPUADDR
+
+				;PPU direct method
+		; LDA BKGNDPALETTE+1 ;1-->temp	;potential issue here is BKGNDPALETTE is 2 bytes and register can only hold 1 byte
+		; STA PALETTECYCLETEMP
+		; LDA BKGNDPALETTE+2 ;2-->1
+		; STA PPUDATA			;PPUADDR will auto-increment, so we don't have to do so manually
+		; LDA BKGNDPALETTE+3 ;3-->2
+		; STA PPUDATA
+		; LDA PALETTECYCLETEMP ;temp-->3
+		; STA PPUDATA
+		
+		LDA #2
+		CLC
+		ADC PALETTECYCLEOFFSET
+		TAX
+		; CPX #4
+		; BNE :+
+		; LDX #1
+		LDY #0
+
+		CYCLELOOP: 
+		CPX #4
+		BNE :+
+		LDX #1
+		: LDA RAMBKGNDPALETTES, X
+		STA PPUDATA		;remember, PPUADDR will auto increment. so we don't have to do so manually
 		INX
-		TXA
-		STA PPUADDR
-		LDX #0
-	:	LDA INITIALPALETTES+2, X
-		STA PPUDATA
-		; INX
-		; CPX #32
-		; BNE :-
+		INY
+		CPY #3
+		BNE CYCLELOOP
 
 		LDA #>PALETTES		; workaround for palette corruption bug - https://www.nesdev.org/wiki/PPU_registers#Palette_corruption
-		STA PPUADDR
+		STA PPUADDR				;should prolly make this a subroutine
 		LDA #<PALETTES
 		STA PPUADDR
 		STA PPUADDR
 		STA PPUADDR
 
-		
-MODULUS:
-	SEC
-	SBC #32
-	RTS
+		LDX PALETTECYCLEOFFSET	;configure PALETTECYCEOFFSET for future use
+		INX
+		CPX #3									;PALETTECYCEOFFSET should always be b/w 0-2
+		BNE :+
+		LDX #0
+		:STX PALETTECYCLEOFFSET
 
+		RTS
+		;so this works (yay) but I don't want it to keep flickering as I hold the button
 
 INITIALSPRITES:
 		; mushroom
@@ -404,7 +423,8 @@ INITIALSPRITES:
 		.byte $58, $4E, $00, $85
 		.byte $58, $4E, $40, $95
 
-INITIALPALETTES:
+RAMPALETTES:
+RAMBKGNDPALETTES:
 	 	;background palettes - https://www.nesdev.org/wiki/PPU_palettes#Palettes
 		.byte $00
 		;.byte $31, $00, $0A, $15	; background palette 0
@@ -413,6 +433,7 @@ INITIALPALETTES:
 		.byte $00, $00, $00, $00	; background palette 1 (unused)
 		.byte $00, $00, $00, $00	; background palette 2 (unused)
 		.byte $00, $00, $00		; background palette 3 (unused)
+RAMSPRITEPALETTES:
 		; sprite palettes
 		.byte $31
 		.byte $0F, $15, $30, $00	; sprite palette 0
