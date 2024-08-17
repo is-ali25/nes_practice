@@ -82,10 +82,15 @@ MOVEX:  	.res 2			; array of sprite movement x directions (2)
 MOVEY:  	.res 2			; array of sprite movement y directions (2)
 DX:		.res 1
 DY:		.res 1
-PALETTECYCLETEMP: .res 0
+
+PALETTECYCLETEMP: .res 1
 PALETTECYCLEOFFSET: .byte 0
+
 SCROLLX: .byte 0
 SCROLLY: .byte 0
+
+BUTTONS: .res 1
+LASTFRAMEBUTTONS: .res 1
 
 
 		.segment "STARTUP"
@@ -232,38 +237,53 @@ NMI:		PHA			; save registers
 	  PLA
 		RTI
 
-DRAW:		LDA #1			; read joypads
-
-		STA JOYPAD1
-		LDA #0
-		STA JOYPAD1
-		LDA JOYPAD1		; get first botton (A button), if pressed move the sprites
-		AND #%00000001
+DRAW:		
+		JSR READCONTROLLER
+		LDA BUTTONS
+		AND #$80 ;check for A button
 		BEQ :+
 
 		JSR MOVE		; move sprites
+
+	:
+				;don't want to cycle palette if button was pressed last frame
+		LDA LASTFRAMEBUTTONS
+		EOR #$FF
+		AND BUTTONS 
+		AND #$40		;check for B button
+		BEQ :+
 		JSR PALETTECYCLE
 
 	:	
+
 		LDA #$02		; load sprite data into OAM
 		STA OAMDMA
 
-						;scroll the nametable
-		BIT PPUSTATUS
-		INC SCROLLX
-		LDA SCROLLX
-		STA PPUSCROLL
-		LDA SCROLLY
-		STA PPUSCROLL
+		JSR SCROLLCHECK ;check if we need to scroll the nametable
 
-		;BIT PPUSTATUS		; reset loading
-		;LDA #0
-		;STA PPUSCROLL
-		;STA PPUSCROLL
+		LDA BUTTONS					;update last frame buttons variable
+		STA LASTFRAMEBUTTONS
+		
 		RTS
 
-; subroutine that moves the sprites
-MOVE:		LDA #MUSHROOM		; talking about the mushroom
+
+READCONTROLLER:
+		LDA #$01					; latch joypad buttons
+		STA JOYPAD1
+		LDA #$00
+		STA JOYPAD1
+
+		LDX #8
+		INPUTLOOP:		;A,B,SEL,START,UP,DOWN,LEFT,RIGHT
+			LDA JOYPAD1	
+			LSR A				;if button is active, will set the carry flag to 1
+			ROL BUTTONS ;shifts in whatever's in the carry flag
+			DEX
+			BNE INPUTLOOP
+		RTS
+		
+MOVE:		; subroutine that moves the sprites
+		LDA #MUSHROOM		; first do the mushroom
 		JSR BOUNCE
 		LDA #SWORD		; now do the sword
 
@@ -355,9 +375,6 @@ PALETTECYCLE:
 		CLC
 		ADC PALETTECYCLEOFFSET
 		TAX
-		; CPX #4
-		; BNE :+
-		; LDX #1
 		LDY #0
 
 		CYCLELOOP: 
@@ -386,7 +403,38 @@ PALETTECYCLE:
 		:STX PALETTECYCLEOFFSET
 
 		RTS
-		;so this works (yay) but I don't want it to keep flickering as I hold the button
+
+SCROLLCHECK:
+		BIT PPUSTATUS
+		LDA BUTTONS		
+		AND #$02			;check left button
+		BEQ :+
+		DEC SCROLLX
+
+		: 
+		LDA BUTTONS		;I don't like the repitition of this load instruction
+		AND #$01			;check right button
+		BEQ :+
+		INC SCROLLX
+
+		: 
+		LDA BUTTONS
+		AND #$08			;check up button
+		BEQ :+
+		DEC SCROLLY
+
+		: 
+		LDA BUTTONS
+		AND #$04			;check down button
+		BEQ :+
+		INC SCROLLY
+
+		: LDA SCROLLX
+		STA PPUSCROLL
+		LDA SCROLLY
+		STA PPUSCROLL
+
+		RTS
 
 INITIALSPRITES:
 		; mushroom
